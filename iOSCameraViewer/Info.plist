@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>이 앱은 Apple 이벤트를 사용하여 다른 앱과 상호작용합니다.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>이 앱은 Downloads 폴더에 접근하여 파일을 읽고 씁니다.</string>
+	<key>AppSandbox</key>
+	<dict>
+		<key>com.apple.security.app-sandbox</key>
+		<true/>
+		<key>com.apple.security.files.user-selected.read-write</key>
+		<true/>
+		<key>com.apple.security.files.downloads.read-write</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
+
+

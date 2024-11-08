@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CameraInterop
 
 class CameraManager: NSObject {
 	private var permissionGranted: Bool = false
@@ -252,6 +253,7 @@ class CameraManager: NSObject {
 	}
 }
 
+var imageSaveCount: Int = 0
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 	func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
 		guard let currentFrame = sampleBuffer.cgImage else {
@@ -259,14 +261,66 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 			return
 		}
 		addToPreviewStream?(currentFrame)
+		
+		// Image Buffer C++ <-> Swift 주고 받는 부분
+		let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+		
+		CVPixelBufferLockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
+		
+		let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer!)
+		let height = CVPixelBufferGetHeight(imageBuffer!)
+		let src_buff = CVPixelBufferGetBaseAddress(imageBuffer!)
+		
+		let nsdata = NSData(bytes: src_buff, length: bytesPerRow * height)
+		CVPixelBufferUnlockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
+		
+		let byteArray = Array<UInt8>(nsdata)
+		let byteSize = Int32(bytesPerRow * height)
+		let testArray = Array<UInt8>(CameraModule().decodeMjpegData(byteArray, byteSize))
+		
+		do  {
+			let fileUrl =  try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+			let path = "rawData_" + String(imageSaveCount) + ".hex";
+			imageSaveCount += 1
+			print("#\(imageSaveCount)")
+			let destinationUrl: URL = fileUrl.appendingPathComponent(path)
+			if FileManager().fileExists(atPath: destinationUrl.path) {
+				try FileManager().removeItem(at: destinationUrl)
+			}
+			
+			print(destinationUrl.absoluteString)
+			
+			var strData: String = ""
+			for i in 0..<testArray.count {
+				strData += String(testArray[i])
+			}
+			
+			try strData.write(to: destinationUrl, atomically: true, encoding: .utf8)
+		} catch (let error) {
+			print(error)
+		}
 	}
+}
+
+private func bufferToUInt(sampleBuffer: CMSampleBuffer) -> [UInt8] {
+	let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
+	
+	CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
+	let byterPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+	let height = CVPixelBufferGetHeight(imageBuffer)
+	let srcBuff = CVPixelBufferGetBaseAddress(imageBuffer)
+	
+	let data = NSData(bytes: srcBuff, length: byterPerRow * height)
+	CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
+	
+	return [UInt8].init(repeating: 0, count: data.length / MemoryLayout<UInt8>.size)
 }
 
 extension CMSampleBuffer {
 	var cgImage: CGImage? {
-		let pixelBuffer: CVPixelBuffer? = CMSampleBufferGetImageBuffer(self)
+		let pixelBuffer: CVPixelBuffer? = CMSampleBufferGetImageBuffer(self) // CMSampleBuffer -> CVPixelBuffer
 		guard let imagePixelBuffer = pixelBuffer else { return nil }
-		return CIImage(cvPixelBuffer: imagePixelBuffer).cgImage
+		return CIImage(cvPixelBuffer: imagePixelBuffer).cgImage // CVPixelBuffer -> CIImage
 	}
 }
 
