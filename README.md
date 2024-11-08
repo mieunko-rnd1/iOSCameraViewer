@@ -15,3 +15,8 @@
 // Camera 예제 코드
 * https://gist.github.com/SatoTakeshiX/440a0b8b3c859d44fcf91dae3e0f8a32
 * https://github.com/create-with-swift/Camera-capture-setup-in-SwiftUI
+
+// OpenCV
+* https://object-world.tistory.com/28
+* https://medium.com/@hdpoorna/integrating-opencv-to-your-swift-ios-project-in-xcode-and-working-with-uiimages-4c614e62ac88
+* OpenCV는 파일 크기가 커서 git에 push가 안되서 opencv-4.10.0-ios-framework.zip 파일 받아서 project에 직접 추가해줘야함
