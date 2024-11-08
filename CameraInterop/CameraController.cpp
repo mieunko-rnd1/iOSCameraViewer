@@ -2,11 +2,26 @@
 
 #include <CameraInterop-Swift.h>
 
+#include <opencv2/opencv.hpp>
+
 #include <iostream>
+#include <cstdio>
 
 CameraController::CameraController()
 {
 	
+}
+
+std::vector<unsigned char> CameraController::decodeMjpegData(const unsigned char* data, int size)
+{
+	if (data == nullptr)
+	{
+		return {};
+	}
+	
+	std::vector<unsigned char> imageData = std::vector<unsigned char>(data, data + size);
+	
+	return imageData;
 }
 
 bool CameraController::sendToCPlusPlus(int number)
@@ -27,3 +42,4 @@ bool CameraController::sendToSwift(int number)
 	swiftCameraModule.sendToSwift(number + 1);
 	return true;
 }
+

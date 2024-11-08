@@ -5,10 +5,14 @@
 
 #include <swift/bridging>
 
+#include <vector>
+
 class CameraController {
 	
 public:
 	CameraController();
+	
+	std::vector<unsigned char> decodeMjpegData(const unsigned char* data, int size);
 	
 	// Swift -> C++
 	bool sendToCPlusPlus(int number);
