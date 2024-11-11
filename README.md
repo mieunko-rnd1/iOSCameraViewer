@@ -20,3 +20,4 @@
 * https://object-world.tistory.com/28
 * https://medium.com/@hdpoorna/integrating-opencv-to-your-swift-ios-project-in-xcode-and-working-with-uiimages-4c614e62ac88
 * OpenCV는 파일 크기가 커서 git에 push가 안되서 opencv-4.10.0-ios-framework.zip 파일 받아서 project에 직접 추가해줘야함
+* 파일 압축 해제 후 opencv2.framework 파일을 project 폴더 아래에 복사해두면 됨

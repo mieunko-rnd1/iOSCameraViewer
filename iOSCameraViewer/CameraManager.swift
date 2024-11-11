@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 import CoreImage
 import CameraInterop
 
@@ -253,34 +254,95 @@ class CameraManager: NSObject {
 	}
 }
 
+func convertCIImageToUIImage(cmage: CIImage) -> UIImage {
+	let context = CIContext(options: nil)
+	let cgImage = context.createCGImage(cmage, from: cmage.extent)!
+	let image = UIImage(cgImage: cgImage)
+	return image
+}
+
+func convertNSDataToByteArray(nsData: NSData) -> Array<UInt8> {
+	let count = nsData.length / MemoryLayout<Int8>.size
+	var bytes = [UInt8](repeating: 0, count: count)
+	
+	// copy bytes into array
+	nsData.getBytes(&bytes, length:count * MemoryLayout<Int8>.size)
+	
+	var byteArray:Array = Array<UInt8>()
+	
+	for i in 0 ..< count {
+		byteArray.append(bytes[i])
+	}
+	
+	return byteArray
+}
+
+func rgbaArrayToUIImage(data:[UInt8], width:Int, height:Int) -> UIImage? {
+	var data = data
+	
+	guard let provider = CGDataProvider(data: NSData(bytes: &data, length: data.count)) else {
+		return nil
+	}
+	
+	guard let cgimage = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider, decode: nil, shouldInterpolate: true, intent: CGColorRenderingIntent.defaultIntent) else {
+		return nil
+	}
+	
+	return UIImage(cgImage: cgimage)
+}
+
 var imageSaveCount: Int = 0
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 	func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
 		guard let currentFrame = sampleBuffer.cgImage else {
-			print("Can't translate to CGImage...!")
+			print("Cannot translate to CGImage...!")
 			return
 		}
 		addToPreviewStream?(currentFrame)
 		
+		// Get Raw Pixel
+		guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+			print("Cannot get image buffer...!")
+			return
+		}
+		
+		CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
+		/*
+		// Convert Raw Pixel to CIImage
+		let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+		
+		// Convert CIImage to UIImage
+		let uiImage = convertCIImageToUIImage(cmage: ciImage)
+		*/
+		guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else {
+			print("Cannot get buffer base address...!")
+			return
+		}
+		
+		let rawImageBuffer = baseAddress.assumingMemoryBound(to: UInt8.self) // UnsafeMutablePointer<UInt8>
+			
+		//let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+		let bufferWidth = CVPixelBufferGetWidth(imageBuffer)
+		let bufferHeight = CVPixelBufferGetHeight(imageBuffer)
+		let bufferSize = CVPixelBufferGetDataSize(imageBuffer)
+		
+		// Convert Raw Pixel to NSData
+		let nsData = NSData(bytes: rawImageBuffer, length: bufferSize)
+		
+		// Convert NSData to Byte Array
+		let byteArray = convertNSDataToByteArray(nsData: nsData)
+		
 		// Image Buffer C++ <-> Swift 주고 받는 부분
-		let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+		let resultArray = Array<UInt8>(CameraModule().decodeMjpegData(byteArray, Int32(bufferSize)))
 		
-		CVPixelBufferLockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
-		
-		let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer!)
-		let height = CVPixelBufferGetHeight(imageBuffer!)
-		let src_buff = CVPixelBufferGetBaseAddress(imageBuffer!)
-		
-		let nsdata = NSData(bytes: src_buff, length: bytesPerRow * height)
-		CVPixelBufferUnlockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
-		
-		let byteArray = Array<UInt8>(nsdata)
-		let byteSize = Int32(bytesPerRow * height)
-		let testArray = Array<UInt8>(CameraModule().decodeMjpegData(byteArray, byteSize))
+		guard let resultUIImage = rgbaArrayToUIImage(data: resultArray, width: bufferWidth, height: bufferHeight) else {
+			print("Cannot create result UIImage...!")
+			return
+		}
 		
 		do  {
 			let fileUrl =  try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-			let path = "rawData_" + String(imageSaveCount) + ".hex";
+			let path = "rawData_" + String(imageSaveCount) + ".jpg";
 			imageSaveCount += 1
 			print("#\(imageSaveCount)")
 			let destinationUrl: URL = fileUrl.appendingPathComponent(path)
@@ -290,15 +352,16 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 			
 			print(destinationUrl.absoluteString)
 			
-			var strData: String = ""
-			for i in 0..<testArray.count {
-				strData += String(testArray[i])
+			if let data = resultUIImage.jpegData(compressionQuality: 1) {
+			//if let data = uiImage!.jpegData(compressionQuality: 1) {
+				try? data.write(to: destinationUrl)
 			}
 			
-			try strData.write(to: destinationUrl, atomically: true, encoding: .utf8)
 		} catch (let error) {
 			print(error)
 		}
+		
+		CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
 	}
 }
 
