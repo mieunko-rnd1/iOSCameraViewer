@@ -9,6 +9,8 @@ class CameraManager: NSObject {
 	private var captureSession: AVCaptureSession = AVCaptureSession() // 해당 객체 생성으로 입력(비디오, 오디오)을 캡쳐 할 수 있음
 	private var addToPreviewStream: ((CGImage) -> Void)?
 	
+	private var isWebCam: Bool = false
+	
 	lazy var previewStream: AsyncStream<CGImage> = {
 		AsyncStream { continuation in
 			addToPreviewStream = { cgImage in
@@ -44,6 +46,7 @@ class CameraManager: NSObject {
 				switch device.localizedName {
 				case "C270 HD WEBCAM":
 					isFound = true
+					isWebCam = true
 					break;
 				case "Medit MO3":
 					isFound = true
@@ -151,18 +154,24 @@ class CameraManager: NSObject {
 		print(#function)
 		
 		// 여기에서 pixel format과 width, height 값을 변경할 수 있음
-		
 		let output = AVCaptureVideoDataOutput()
-		output.videoSettings = [
-								kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange,
-								// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
-								// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-								// kCVPixelFormatType_32BGRA
-								kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
-								kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
-								]
-		
-		output.alwaysDiscardsLateVideoFrames = true
+		if (isWebCam) {
+			output.videoSettings = [
+				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+			]
+		}
+		else {
+			output.videoSettings = [
+				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange,
+				// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
+				// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+				// kCVPixelFormatType_32BGRA
+				kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
+				kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
+			]
+			
+			output.alwaysDiscardsLateVideoFrames = true
+		}
 		
 		// 세션에 데이터 출력 추가
 		if session.canAddOutput(output) {
@@ -222,11 +231,10 @@ class CameraManager: NSObject {
 		var maxResolutionWidth = 0
 		var maxResolutionHeight = 0
 		var maxResolutionFormat: AVCaptureDevice.Format!
+		
 		for format in captureDevice.formats {
-			
 			for dimension in format.supportedMaxPhotoDimensions {
-				if (dimension.width == 1104 && dimension.height == 6440)
-				{
+				//if (dimension.width == 1104 && dimension.height == 6440) {
 					maxResolutionFormat = format
 					
 					maxResolutionWidth = Int(dimension.width);
@@ -234,7 +242,7 @@ class CameraManager: NSObject {
 				
 					let formatDescription = format.formatDescription
 					print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType)")
-				}
+				//}
 			}
 			
 			for range in format.videoSupportedFrameRateRanges {
@@ -243,8 +251,6 @@ class CameraManager: NSObject {
 				//let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
 				//print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType), FPS 범위: \(range.minFrameRate)~\(range.maxFrameRate)")
 			}
-			
-			
 		}
 		
 		// 읽어온 포멧 중에 width, height가 제일 큰 맨 마지막 포멧으로 설정해서 넣는 부분
@@ -253,9 +259,11 @@ class CameraManager: NSObject {
 			
 			captureDevice.activeFormat = maxResolutionFormat
 			
-			captureDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
-			captureDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
-			//print("FPS 설정 완료: \(fps)")
+			if (isWebCam == false) {
+				captureDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
+				captureDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
+				//print("FPS 설정 완료: \(fps)")
+			}
 			
 			captureDevice.unlockForConfiguration()
 		} catch {
@@ -423,11 +431,10 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 		// 버퍼의 첫번재 두번째 값을 읽어옴
 		print("[0]: \(rawImageBuffer[0]), [1]: \(rawImageBuffer[1])")
 		
-		
-		
-		// ----- 아래 영상 저장 관련 코드들은 동작하지 않음 (코드 새로 짜야함) -----
-		
-		
+		// Webcam일 경우에 들어온 영상을 저장함
+		if (isWebCam == false) {
+			return
+		}
 		
 		// Convert NSData to Byte Array
 		let byteArray = convertNSDataToByteArray(nsData: nsData)
