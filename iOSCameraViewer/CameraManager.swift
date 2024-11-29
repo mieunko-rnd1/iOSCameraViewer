@@ -150,16 +150,27 @@ class CameraManager: NSObject {
 	private func prepareVideoOutput(session: AVCaptureSession) -> Bool {
 		print(#function)
 		
-		let videoOutput = AVCaptureVideoDataOutput()
-		videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA]
+		// 여기에서 pixel format과 width, height 값을 변경할 수 있음
+		
+		let output = AVCaptureVideoDataOutput()
+		output.videoSettings = [
+								kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange,
+								// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
+								// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+								// kCVPixelFormatType_32BGRA
+								kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
+								kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
+								]
+		
+		output.alwaysDiscardsLateVideoFrames = true
 		
 		// 세션에 데이터 출력 추가
-		if session.canAddOutput(videoOutput) {
-			session.addOutput(videoOutput)
+		if session.canAddOutput(output) {
+			session.addOutput(output)
 			
 			// queue 추가
 			let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInteractive)
-			videoOutput.setSampleBufferDelegate(self, queue: videoQueue)
+			output.setSampleBufferDelegate(self, queue: videoQueue)
 			
 			return true
 		}
@@ -207,8 +218,52 @@ class CameraManager: NSObject {
 			}
 		}
 		
+		// 현재 연결된 장비의 pixel format과 width, height 등의 format 정보를 읽어 오는 부분
+		var maxResolutionWidth = 0
+		var maxResolutionHeight = 0
+		var maxResolutionFormat: AVCaptureDevice.Format!
+		for format in captureDevice.formats {
+			
+			for dimension in format.supportedMaxPhotoDimensions {
+				if (dimension.width == 1104 && dimension.height == 6440)
+				{
+					maxResolutionFormat = format
+					
+					maxResolutionWidth = Int(dimension.width);
+					maxResolutionHeight = Int(dimension.height);
+				
+					let formatDescription = format.formatDescription
+					print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType)")
+				}
+			}
+			
+			for range in format.videoSupportedFrameRateRanges {
+				
+				let formatDescription = format.formatDescription
+				//let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+				//print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType), FPS 범위: \(range.minFrameRate)~\(range.maxFrameRate)")
+			}
+			
+			
+		}
+		
+		// 읽어온 포멧 중에 width, height가 제일 큰 맨 마지막 포멧으로 설정해서 넣는 부분
+		do {
+			try captureDevice.lockForConfiguration()
+			
+			captureDevice.activeFormat = maxResolutionFormat
+			
+			captureDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
+			captureDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
+			//print("FPS 설정 완료: \(fps)")
+			
+			captureDevice.unlockForConfiguration()
+		} catch {
+			print("디바이스 설정 실패: \(error)")
+		}
+		
 		let session = AVCaptureSession()
-		session.sessionPreset = .inputPriority // 캡처 세션에 대한 오디오 및 비디오 출력 설정을 지정하지 않음
+		session.sessionPreset = .high //.hd1920x1080
 		
 		session.beginConfiguration()
 		
@@ -300,13 +355,45 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 		}
 		addToPreviewStream?(currentFrame)
 		
+		// 포맷 설명 가져오기
+		guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+			print("포맷 설명을 가져올 수 없습니다.")
+			return
+		}
+		
+		// 해상도 추출
+		let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
+		
+		// fps 추출
+		var fps = 0.0
+		
+		// 샘플 버퍼에서 presentationTimeStamp와 duration 가져오기
+		let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+		let duration = CMSampleBufferGetDuration(sampleBuffer)
+		
+		// 프레임 간 시간 계산
+		let durationSeconds = CMTimeGetSeconds(duration)
+		let presentationTimeSeconds = CMTimeGetSeconds(presentationTime)
+		
+		if durationSeconds > 0 {
+			// FPS 계산: 1초를 샘플 간 간격으로 나눈 값
+			fps = 1 / durationSeconds
+		}
+		
+		// 현재 output으로 들어오는 format 값 읽어옴
+		print("현재 해상도: \(dimensions.width)x\(dimensions.height), 포맷: \(formatDescription.mediaSubType), FPS 범위: \(fps)")
+		
 		// Get Raw Pixel
 		guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
 			print("Cannot get image buffer...!")
 			return
 		}
 		
-		CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
+		guard CVPixelBufferLockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess else {
+			print("Failed to lock base address of image buffer.")
+			return
+		}
+		
 		/*
 		// Convert Raw Pixel to CIImage
 		let ciImage = CIImage(cvPixelBuffer: imageBuffer)
@@ -314,20 +401,33 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 		// Convert CIImage to UIImage
 		let uiImage = convertCIImageToUIImage(cmage: ciImage)
 		*/
+		
+		
 		guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else {
 			print("Cannot get buffer base address...!")
 			return
 		}
 		
-		let rawImageBuffer = baseAddress.assumingMemoryBound(to: UInt8.self) // UnsafeMutablePointer<UInt8>
-			
-		//let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
+		let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer)
 		let bufferWidth = CVPixelBufferGetWidth(imageBuffer)
 		let bufferHeight = CVPixelBufferGetHeight(imageBuffer)
 		let bufferSize = CVPixelBufferGetDataSize(imageBuffer)
 		
+		print("bytesPerRow: \(bytesPerRow), bufferWidth: \(bufferWidth), bufferHeight: \(bufferHeight), bufferSize: \(bufferSize)")
+		
+		let rawImageBuffer = baseAddress.assumingMemoryBound(to: UInt8.self) // UnsafeMutablePointer<UInt8>
+		 
 		// Convert Raw Pixel to NSData
 		let nsData = NSData(bytes: rawImageBuffer, length: bufferSize)
+		
+		// 버퍼의 첫번재 두번째 값을 읽어옴
+		print("[0]: \(rawImageBuffer[0]), [1]: \(rawImageBuffer[1])")
+		
+		
+		
+		// ----- 아래 영상 저장 관련 코드들은 동작하지 않음 (코드 새로 짜야함) -----
+		
+		
 		
 		// Convert NSData to Byte Array
 		let byteArray = convertNSDataToByteArray(nsData: nsData)
@@ -340,11 +440,44 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 			return
 		}
 		
+		/*
+		guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+			print("Failed to get pixel buffer from sample buffer")
+			return
+		}
+		
+		// Step 1: Create a CIImage from the pixel buffer
+		let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+		
+		// Step 2: Create a CIContext for rendering
+		let ciContext = CIContext(options: nil)
+		
+		// Step 3: Get the dimensions of the pixel buffer
+		let width = CVPixelBufferGetWidth(pixelBuffer)
+		let height = CVPixelBufferGetHeight(pixelBuffer)
+		let rect = CGRect(x: 0, y: 0, width: width, height: height)
+		
+		// Step 4: Render the CIImage to a CGImage
+		guard let cgImage = ciContext.createCGImage(ciImage, from: rect) else {
+			print("Failed to create CGImage from CIImage")
+			return
+		}
+		
+		// Step 5: Convert the CGImage to JPEG data
+		let resultUIImage = UIImage(cgImage: cgImage)
+		
+		guard CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0)) == kCVReturnSuccess else {
+			print("Failed to unlock base address of image buffer.")
+			return
+		}
+		*/
+		
 		do  {
 			let fileUrl =  try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
 			let path = "rawData_" + String(imageSaveCount) + ".jpg";
 			imageSaveCount += 1
 			print("#\(imageSaveCount)")
+			print("#\(path)")
 			let destinationUrl: URL = fileUrl.appendingPathComponent(path)
 			if FileManager().fileExists(atPath: destinationUrl.path) {
 				try FileManager().removeItem(at: destinationUrl)
@@ -356,12 +489,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 			//if let data = uiImage!.jpegData(compressionQuality: 1) {
 				try? data.write(to: destinationUrl)
 			}
-			
 		} catch (let error) {
 			print(error)
 		}
-		
-		CVPixelBufferUnlockBaseAddress(imageBuffer, CVPixelBufferLockFlags(rawValue: 0))
 	}
 }
 
