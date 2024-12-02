@@ -132,7 +132,7 @@ class CameraManager: NSObject {
 		return ""
 	}
 	
-	func listSupportedFormats(for device: AVCaptureDevice) {
+	func listSupportedInputFormats(for device: AVCaptureDevice) {
 		for format in device.formats {
 			let description = format.formatDescription
 			let mediaType = description.mediaType
@@ -153,11 +153,24 @@ class CameraManager: NSObject {
 									  (fourCC >> 8) & 0xff,
 									  fourCC & 0xff)
 
-			print("Format: \(fourCCString), Width: \(width), Height: \(height), Min FPS: \(minFrameRate), Max FPS: \(maxFrameRate)")
+			print("Supported Input Format: \(fourCCString), Width: \(width), Height: \(height), Min FPS: \(minFrameRate), Max FPS: \(maxFrameRate)")
+		}
+	}
+	
+	func listSupportedOutputFormats(for output: AVCaptureVideoDataOutput) {
+		let supportedPixelFormats = output.availableVideoPixelFormatTypes
+		for currentPixelFormat in supportedPixelFormats {
+			let fourCCString = String(format: "%c%c%c%c",
+									  (currentPixelFormat >> 24) & 0xff,
+									  (currentPixelFormat >> 16) & 0xff,
+									  (currentPixelFormat >> 8) & 0xff,
+									  currentPixelFormat & 0xff)
+			
+			print("Supported Output Format: \(fourCCString)")
 		}
 	}
 
-	func setVideoFormat(device: AVCaptureDevice, width: Int32, height: Int32, frameRate: Double, fourCC: String) -> Bool {
+	func setVideoInputFormat(device: AVCaptureDevice, width: Int32, height: Int32, frameRate: Double, fourCC: String) -> Bool {
 		for format in device.formats {
 			let description = format.formatDescription
 			let dimensions = CMVideoFormatDescriptionGetDimensions(description)
@@ -193,6 +206,19 @@ class CameraManager: NSObject {
 		print(#function)
 		
 		do {
+			listSupportedInputFormats(for: device)
+			
+			// 원하는 포맷 설정
+			let width: Int32 = 1104
+			let height: Int32 = 6440
+			let frameRate: Double = 30.0
+			let fourCC: String = "420f" // 예: "420v" 또는 "420f"
+			
+			if !setVideoInputFormat(device: device, width: width, height: height, frameRate: frameRate, fourCC: fourCC) {
+				print("Failed to set video format")
+				return false
+			}
+			
 			let input = try AVCaptureDeviceInput(device: device)
 			
 			// 세션에 데이터 입력 추가
@@ -218,8 +244,13 @@ class CameraManager: NSObject {
 			]
 		}
 		else {
+			listSupportedOutputFormats(for: output)
+			
 			output.videoSettings = [
-				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+				// kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange
+				// kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange
+				// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange
 				// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
 				// kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, 420v
 				// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, 420f
@@ -227,7 +258,7 @@ class CameraManager: NSObject {
 				//kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
 			]
 			
-			output.alwaysDiscardsLateVideoFrames = true
+			output.alwaysDiscardsLateVideoFrames = false
 		}
 		
 		// 세션에 데이터 출력 추가
@@ -282,19 +313,6 @@ class CameraManager: NSObject {
 				print("Cannot found capture device...!")
 				return
 			}
-		}
-		
-		listSupportedFormats(for: captureDevice)
-		
-		// 원하는 포맷 설정
-		let width: Int32 = 1104
-		let height: Int32 = 6440
-		let frameRate: Double = 30.0
-		let fourCC: String = "420f" // 예: "420v" 또는 "420f"
-		
-		if !setVideoFormat(device: captureDevice, width: width, height: height, frameRate: frameRate, fourCC: fourCC) {
-			print("Failed to set video format")
-			return
 		}
 		
 		let session = AVCaptureSession()
