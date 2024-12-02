@@ -131,81 +131,68 @@ class CameraManager: NSObject {
 		
 		return ""
 	}
-    
-    func listSupportedFormats(for device: AVCaptureDevice) {
-        for format in device.formats {
-            let description = format.formatDescription
-            let mediaType = description.mediaType
-            let subType = description.mediaSubType
-            
-            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
-            let width = dimensions.width
-            let height = dimensions.height
-            
-            let frameRates = format.videoSupportedFrameRateRanges
-            let minFrameRate = frameRates.first?.minFrameRate ?? 0
-            let maxFrameRate = frameRates.first?.maxFrameRate ?? 0
-            
-            let fourCC = subType.rawValue
-            let fourCCString = String(format: "%c%c%c%c",
-                                      (fourCC >> 24) & 0xff,
-                                      (fourCC >> 16) & 0xff,
-                                      (fourCC >> 8) & 0xff,
-                                      fourCC & 0xff)
-            
-            print("Format: \(fourCCString), Width: \(width), Height: \(height), Min FPS: \(minFrameRate), Max FPS: \(maxFrameRate)")
-        }
-    }
-    
-    func setVideoFormat(device: AVCaptureDevice, width: Int32, height: Int32, frameRate: Double, fourCC: String) -> Bool {
-        for format in device.formats {
-            let description = format.formatDescription
-            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
-            let frameRates = format.videoSupportedFrameRateRanges
-            let minFrameRate = frameRates.first?.minFrameRate ?? 0
-            let maxFrameRate = frameRates.first?.maxFrameRate ?? 0
-            
-            let subType = description.mediaSubType
-            let fourCCString = String(format: "%c%c%c%c",
-                                      (subType.rawValue >> 24) & 0xff,
-                                      (subType.rawValue >> 16) & 0xff,
-                                      (subType.rawValue >> 8) & 0xff,
-                                      subType.rawValue & 0xff)
-            
-            if dimensions.width == width && dimensions.height == height && fourCCString == fourCC && minFrameRate <= frameRate && maxFrameRate >= frameRate {
-                do {
-                    try device.lockForConfiguration()
-                    device.activeFormat = format
-                    device.activeVideoMinFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
-                    device.activeVideoMaxFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
-                    device.unlockForConfiguration()
-                    return true
-                } catch {
-                    print("Error setting video format: \(error.localizedDescription)")
-                    return false
-                }
-            }
-        }
-        return false
-    }
-    
+	
+	func listSupportedFormats(for device: AVCaptureDevice) {
+		for format in device.formats {
+			let description = format.formatDescription
+			let mediaType = description.mediaType
+			let subType = description.mediaSubType
+
+			let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+			let width = dimensions.width
+			let height = dimensions.height
+
+			let frameRates = format.videoSupportedFrameRateRanges
+			let minFrameRate = frameRates.first?.minFrameRate ?? 0
+			let maxFrameRate = frameRates.first?.maxFrameRate ?? 0
+
+			let fourCC = subType.rawValue
+			let fourCCString = String(format: "%c%c%c%c",
+									  (fourCC >> 24) & 0xff,
+									  (fourCC >> 16) & 0xff,
+									  (fourCC >> 8) & 0xff,
+									  fourCC & 0xff)
+
+			print("Format: \(fourCCString), Width: \(width), Height: \(height), Min FPS: \(minFrameRate), Max FPS: \(maxFrameRate)")
+		}
+	}
+
+	func setVideoFormat(device: AVCaptureDevice, width: Int32, height: Int32, frameRate: Double, fourCC: String) -> Bool {
+		for format in device.formats {
+			let description = format.formatDescription
+			let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+			let frameRates = format.videoSupportedFrameRateRanges
+			let minFrameRate = frameRates.first?.minFrameRate ?? 0
+			let maxFrameRate = frameRates.first?.maxFrameRate ?? 0
+
+			let subType = description.mediaSubType
+			let fourCCString = String(format: "%c%c%c%c",
+									  (subType.rawValue >> 24) & 0xff,
+									  (subType.rawValue >> 16) & 0xff,
+									  (subType.rawValue >> 8) & 0xff,
+									  subType.rawValue & 0xff)
+
+			if dimensions.width == width && dimensions.height == height && fourCCString == fourCC && minFrameRate <= frameRate && maxFrameRate >= frameRate {
+				do {
+					try device.lockForConfiguration()
+					device.activeFormat = format
+					device.activeVideoMinFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
+					device.activeVideoMaxFrameDuration = CMTimeMake(value: 1, timescale: Int32(frameRate))
+					device.unlockForConfiguration()
+					return true
+				} catch {
+					print("Error setting video format: \(error.localizedDescription)")
+					return false
+				}
+			}
+		}
+		return false
+	}
+	
 	private func prepareVideoInput(device: AVCaptureDevice, session: AVCaptureSession ) -> Bool {
 		print(#function)
 		
 		do {
-            listSupportedFormats(for: device)
-            
-            // 원하는 포맷 설정
-            let width: Int32 = 1104
-            let height: Int32 = 6440
-            let frameRate: Double = 30.0
-            let fourCC: String = "420f" // 예: "420v" 또는 "420f"
-            
-            if !setVideoFormat(device: device, width: width, height: height, frameRate: frameRate, fourCC: fourCC) {
-                print("Failed to set video format")
-                return false
-            }
-            
 			let input = try AVCaptureDeviceInput(device: device)
 			
 			// 세션에 데이터 입력 추가
@@ -232,10 +219,10 @@ class CameraManager: NSObject {
 		}
 		else {
 			output.videoSettings = [
-				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange,
+				kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
 				// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
-				// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-				// kCVPixelFormatType_32BGRA
+				// kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, 420v
+				// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, 420f
 				//kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
 				//kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
 			]
@@ -297,51 +284,21 @@ class CameraManager: NSObject {
 			}
 		}
 		
-		// 현재 연결된 장비의 pixel format과 width, height 등의 format 정보를 읽어 오는 부분
-		var maxResolutionWidth = 0
-		var maxResolutionHeight = 0
-		var maxResolutionFormat: AVCaptureDevice.Format!
+		listSupportedFormats(for: captureDevice)
 		
-		for format in captureDevice.formats {
-			for dimension in format.supportedMaxPhotoDimensions {
-				//if (dimension.width == 1104 && dimension.height == 6440) {
-					maxResolutionFormat = format
-					
-					maxResolutionWidth = Int(dimension.width);
-					maxResolutionHeight = Int(dimension.height);
-				
-					let formatDescription = format.formatDescription
-					print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType)")
-				//}
-			}
-			
-			for range in format.videoSupportedFrameRateRanges {
-				
-				let formatDescription = format.formatDescription
-				//let dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription)
-				//print("해상도: \(maxResolutionWidth) x \(maxResolutionHeight), 포맷: \(formatDescription.mediaSubType), FPS 범위: \(range.minFrameRate)~\(range.maxFrameRate)")
-			}
-		}
+		// 원하는 포맷 설정
+		let width: Int32 = 1104
+		let height: Int32 = 6440
+		let frameRate: Double = 30.0
+		let fourCC: String = "420f" // 예: "420v" 또는 "420f"
 		
-		// 읽어온 포멧 중에 width, height가 제일 큰 맨 마지막 포멧으로 설정해서 넣는 부분
-		do {
-			try captureDevice.lockForConfiguration()
-			
-			captureDevice.activeFormat = maxResolutionFormat
-			
-			if (isWebCam == false) {
-				captureDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
-				captureDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(30))
-				//print("FPS 설정 완료: \(fps)")
-			}
-			
-			captureDevice.unlockForConfiguration()
-		} catch {
-			print("디바이스 설정 실패: \(error)")
+		if !setVideoFormat(device: captureDevice, width: width, height: height, frameRate: frameRate, fourCC: fourCC) {
+			print("Failed to set video format")
+			return
 		}
 		
 		let session = AVCaptureSession()
-        session.sessionPreset = .inputPriority //.hd1920x1080
+		session.sessionPreset = .inputPriority
 		
 		session.beginConfiguration()
 		
