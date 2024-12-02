@@ -152,7 +152,7 @@ class CameraManager: NSObject {
 									  (fourCC >> 16) & 0xff,
 									  (fourCC >> 8) & 0xff,
 									  fourCC & 0xff)
-
+			
 			print("Supported Input Format: \(fourCCString), Width: \(width), Height: \(height), Min FPS: \(minFrameRate), Max FPS: \(maxFrameRate)")
 		}
 	}
@@ -254,8 +254,8 @@ class CameraManager: NSObject {
 				// kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarFullRange
 				// kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, 420v
 				// kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, 420f
-				//kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
-				//kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
+				kCVPixelBufferWidthKey as String: 1104, // 1920 // 1104
+				kCVPixelBufferHeightKey as String: 6440 // 1080 // 6440
 			]
 			
 			output.alwaysDiscardsLateVideoFrames = false
@@ -268,6 +268,11 @@ class CameraManager: NSObject {
 			// queue 추가
 			let videoQueue = DispatchQueue(label: "videoQueue", qos: .userInteractive)
 			output.setSampleBufferDelegate(self, queue: videoQueue)
+			
+			// 연결된 출력의 회전 각도 설정
+			if let connection = output.connection(with: .video) {
+				connection.videoRotationAngle = 0 // 시계 방향 90도 회전
+			}
 			
 			return true
 		}
@@ -399,6 +404,13 @@ func rgbaArrayToUIImage(data:[UInt8], width:Int, height:Int) -> UIImage? {
 	return UIImage(cgImage: cgimage)
 }
 
+func rotateImage(_ ciImage: CIImage, orientation: UIImage.Orientation) -> UIImage? {
+	let context = CIContext()
+	guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+	
+	return UIImage(cgImage: cgImage, scale: 1.0, orientation: orientation)
+}
+
 var imageSaveCount: Int = 0
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 	func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
@@ -448,13 +460,19 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 		}
 		
 		/*
+		// Rotate Image
+		let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+		
+		let rotatedImage = rotateImage(ciImage, orientation: .right)
+		*/
+		
+		/*
 		// Convert Raw Pixel to CIImage
 		let ciImage = CIImage(cvPixelBuffer: imageBuffer)
 		
 		// Convert CIImage to UIImage
 		let uiImage = convertCIImageToUIImage(cmage: ciImage)
 		*/
-		
 		
 		guard let baseAddress = CVPixelBufferGetBaseAddress(imageBuffer) else {
 			print("Cannot get buffer base address...!")
@@ -475,12 +493,12 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 		
 		// 버퍼의 첫번재 두번째 값을 읽어옴
 		print("[0]: \(rawImageBuffer[0]), [1]: \(rawImageBuffer[1])")
-		
+		/*
 		// Webcam일 경우에 들어온 영상을 저장함
 		if (isWebCam == false) {
 			return
 		}
-		
+		*/
 		// Convert NSData to Byte Array
 		let byteArray = convertNSDataToByteArray(nsData: nsData)
 		
